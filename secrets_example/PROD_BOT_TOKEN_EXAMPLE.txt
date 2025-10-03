@@ -1,0 +1,4 @@
+# Пример содержимого файла secrets/PROD_BOT_TOKEN.txt
+# (Предполагая, что это ваш реальный токен):
+
+1234567890:AABBCCDD_YOUR_REAL_PROD_TOKEN_HERE_EFGH
