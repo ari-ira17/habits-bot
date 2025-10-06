@@ -5,7 +5,7 @@ services:
     volumes:
       - .:/app
     env_file:
-      - .env.dev
+      - .env
     depends_on:
       - postgres
     networks:
