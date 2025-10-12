@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  bot:
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    networks:
+      - bot_network
+
+  postgres:
+    image: postgres:latest
+    container_name: dev_postgres_db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./db_init:/docker-entrypoint-initdb.d
+    networks:
+      - bot_network
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata_dev:
+
+networks:
+  bot_network:
+    driver: bridge

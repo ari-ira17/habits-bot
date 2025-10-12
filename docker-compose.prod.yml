@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  bot:
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    secrets:
+      - bot_prod_token
+    depends_on:
+      - postgres
+    networks:
+      - bot_network
+
+  postgres:
+    image: postgres:latest
+    container_name: prod_postgres_db
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./db_init:/docker-entrypoint-initdb.d
+    networks:
+      - bot_network
+
+volumes:
+  pgdata_prod:
+
+networks:
+  bot_network:
+    driver: bridge
+
+secrets:
+  bot_prod_token:
+    file: ./secrets/PROD_BOT_TOKEN.txt
