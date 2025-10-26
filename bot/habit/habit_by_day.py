@@ -7,7 +7,7 @@ from aiogram.utils import markdown
 from aiogram.enums import ParseMode
 from aiogram.types import ReplyKeyboardRemove
 
-from keyboards.inline_keyboards.choose_habit_kb import ButtonText
+from keyboards.reply_keyboards.done_habit_kb import ButtonText
 from .states import Habit_By_Days
 from .data import user_habits
 
@@ -104,24 +104,4 @@ async def send_habit(message: types.Message, data: dict) -> None:
         f"Время напоминания: {data['time_to_check']}"
     )
     await message.answer(text=text)
-
-
-@router.message(Command("my_habits"))
-async def show_my_habits(message: types.Message):
-    user_id = message.from_user.id
-    
-    if user_id not in user_habits or not user_habits[user_id]:
-        await message.answer("У вас пока нет добавленных привычек.")
-        return
-    
-    habits = user_habits[user_id]
-    text = f"📋 Ваши привычки ({len(habits)}):\n\n"
-    
-    for i, habit in enumerate(habits, 1):
-        text += (
-            f"{i}. {habit['title']}\n"
-            f"   🗓️ Дней: {habit['num_days']}\n"
-            f"   ⏰ Время: {habit['time_to_check']}\n\n"
-        )
-    
-    await message.answer(text) 
+ 
