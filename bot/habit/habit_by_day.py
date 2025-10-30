@@ -13,15 +13,14 @@ from .data import user_habits
 
 router = Router(name=__name__)
 
-@router.message(F.text==ButtonText.YES)
-@router.message(Command("add_habit_by_day"))
-async def set_title(message: types.Message, state : FSMContext):
+@router.callback_query(F.data=="by_day")
+async def add_habit_by_day(callback: types.CallbackQuery, state : FSMContext):
     await state.set_state(Habit_By_Days.title)
-    await message.answer(
+    await callback.message.answer(
         text = f"Введите название привычки, которая " 
                 f"будет повторяться по дням:",
                 reply_markup=ReplyKeyboardRemove())
-
+    
 
 @router.message(Habit_By_Days.title, F.text)
 async def set_num_days(message : types.Message, state : FSMContext):
@@ -32,7 +31,7 @@ async def set_num_days(message : types.Message, state : FSMContext):
                 text = f"Введите для привычки {markdown.hbold(message.text)} "
                         f"число повторов в днях:",
                 parse_mode=ParseMode.HTML,
-                )
+                ) 
     
 
 @router.message(Habit_By_Days.time_to_check, F.text)
