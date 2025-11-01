@@ -1,13 +1,10 @@
 #обработка привычки с повтором, например, каждые 2 дня
 
 from aiogram import Router, types, F
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.utils import markdown
 from aiogram.enums import ParseMode
-from aiogram.types import ReplyKeyboardRemove
 
-from keyboards.reply_keyboards.done_habit_kb import ButtonText
 from .states import Habit_By_Days
 from .data import user_habits
 
@@ -16,10 +13,14 @@ router = Router(name=__name__)
 @router.callback_query(F.data=="by_day")
 async def add_habit_by_day(callback: types.CallbackQuery, state : FSMContext):
     await state.set_state(Habit_By_Days.title)
+
+    await state.update_data(owner_id=callback.from_user.id)
+    await callback.message.edit_reply_markup(reply_markup=None)
+
     await callback.message.answer(
         text = f"Введите название привычки, которая " 
-                f"будет повторяться по дням:",
-                reply_markup=ReplyKeyboardRemove())
+                f"будет повторяться по дням:"
+        )
     
 
 @router.message(Habit_By_Days.title, F.text)
@@ -35,8 +36,9 @@ async def set_num_days(message : types.Message, state : FSMContext):
     
 
 @router.message(Habit_By_Days.time_to_check, F.text)
-async def set_time_to_check_(message: types.Message, state: FSMContext):
+async def set_time_to_check(message: types.Message, state: FSMContext):
     parts = message.text.split(':')
+
     if len(parts) == 2 and parts[0].isnumeric() and parts[1].isnumeric():
         hours = int(parts[0])
         minutes = int(parts[1])
@@ -44,18 +46,19 @@ async def set_time_to_check_(message: types.Message, state: FSMContext):
             await state.update_data(time_to_check=f"{hours:02d}:{minutes:02d}")
 
             data = await state.get_data()
-            await send_habit(message, data)
+            await send_habit_by_week(message, data)
             await state.clear()  
             return
         else:
             await message.answer(
-                text = "0 <= ЧЧ <= 23, 0 <= ММ <= 59"
+                text = f"Пожалуйста, проверьте, что время удовлетворяет принятым условиям:\n"
+                        f"0 ≤ ЧЧ ≤ 23, 0 ≤ ММ ≤ 59"
             )
             return
     else:
         await message.answer(
-        text = "Пожалуйста, введите время напоминания о привычке в формате <b>ЧЧ:ММ</b>:",
-        parse_mode=ParseMode.HTML,
+            text = "Пожалуйста, введите время напоминания о привычке в формате <b>ЧЧ:ММ</b>:",
+            parse_mode=ParseMode.HTML,
         )
     return
 
@@ -68,7 +71,7 @@ async def set_title_invalid_contetnt_type(message: types.Message):
 
 
 @router.message(Habit_By_Days.num_days, F.text)
-async def set_num_days_invalid_contetnt_type(message: types.Message, state: FSMContext):
+async def set_num_days_invalid_content_type(message: types.Message, state: FSMContext):
     num_days = message.text
 
     if not (num_days.isnumeric() and int(num_days) > 0):
@@ -81,12 +84,12 @@ async def set_num_days_invalid_contetnt_type(message: types.Message, state: FSMC
         await state.update_data(num_days=int(num_days))
         await state.set_state(Habit_By_Days.time_to_check)
         await message.answer(
-            text="Введите время напоминания о привычке в формате <b>ЧЧ:ММ</b>:",
+            text = "Введите введите время напоминания о привычке в формате <b>ЧЧ:ММ</b>:",
             parse_mode=ParseMode.HTML,
         )
-          
 
-async def send_habit(message: types.Message, data: dict) -> None:
+
+async def send_habit_by_week(message: types.Message, data: dict) -> None:
     user_id = message.from_user.id
     
     if user_id not in user_habits:
@@ -95,12 +98,11 @@ async def send_habit(message: types.Message, data: dict) -> None:
     user_habits[user_id].append(data)
 
     text = (
-        f"Ваша добавленная привычка:\n"
-        f"\n"
+        f"<b>Ваша добавленная привычка</b>:\n\n"
+
         f"Название: {data['title']}\n"
         f"Число повторов в днях: {data['num_days']}\n"
-        
-        f"Время напоминания: {data['time_to_check']}"
+        f"Время напоминания: {data['time_to_check']}\n"
     )
-    await message.answer(text=text)
+    await message.answer(text=text, parse_mode=ParseMode.HTML,)
  
