@@ -23,8 +23,8 @@ async def start_add_habit(message: types.Message):
 
 @router.callback_query(F.data=="no")
 async def add_habit_no(callback: types.CallbackQuery):
+    await callback.message.edit_reply_markup(reply_markup=None)
     await callback.message.answer(
-        text= f"Если появится желание - введите /add_habit😌",
-        reply_markup=ReplyKeyboardRemove()
+        text= f"Если появится желание - используйте команду /add_habit😌",
     )
     
