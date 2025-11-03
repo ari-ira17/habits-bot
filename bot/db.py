@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Получаем переменные окружения, установленные в docker-compose.yml
-DB_HOST = os.getenv("DB_HOST", "postgres")  # Должно быть 'postgres'
+DB_HOST = os.getenv("DB_HOST", "localhost")  # Должно быть 'postgres'
 DB_NAME = os.getenv("DB_NAME", "habits_db")
 DB_USER = os.getenv("DB_USER", "user")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
@@ -39,41 +39,42 @@ async def check_db_connection_and_schema():
     """
     logger.info(f"Подключение к БД: {DATABASE_URL}")
     try:
-        # Проверяем подключение
+        # Проверяем подключение и получаем информацию в одном блоке
         async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1")) # Простой запрос для проверки подключения
+            # Проверяем подключение
+            await conn.execute(text("SELECT 1"))
 
-        logger.info("✅ Подключение к БД успешно установлено.")
+            logger.info("✅ Подключение к БД успешно установлено.")
 
-        # Получаем список таблиц
-        async with engine.begin() as conn:
+            # Получаем список таблиц
             result = await conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"))
             tables = result.fetchall()
 
-        logger.info("--- Структура БД ---")
-        if tables:
-            table_names = [table[0] for table in tables]
-            logger.info(f"Найдены таблицы: {', '.join(table_names)}")
+            logger.info("--- Структура БД ---")
+            if tables:
+                table_names = [table[0] for table in tables]
+                logger.info(f"Найдены таблицы: {', '.join(table_names)}")
 
-            # Выводим структуру каждой таблицы
-            for table_name in table_names:
-                logger.info(f"\nТаблица: {table_name}")
-                columns_result = await conn.execute(
-                    text("""
-                        SELECT column_name, data_type, is_nullable, column_default
-                        FROM information_schema.columns
-                        WHERE table_name = :table_name
-                        ORDER BY ordinal_position;
-                    """),
-                    {"table_name": table_name}
-                )
-                columns = columns_result.fetchall()
-                for col in columns:
-                    nullable_str = "NULL" if col[2] == "YES" else "NOT NULL"
-                    default_str = f" DEFAULT {col[3]}" if col[3] else ""
-                    logger.info(f"  - {col[0]} ({col[1]}) {nullable_str}{default_str}")
-        else:
-            logger.info("⚠️  В схеме 'public' таблицы не найдены.")
+                # Выводим структуру каждой таблицы
+                for table_name in table_names:
+                    logger.info(f"\nТаблица: {table_name}")
+                    # Выполняем второй запрос в том же соединении
+                    columns_result = await conn.execute(
+                        text("""
+                            SELECT column_name, data_type, is_nullable, column_default
+                            FROM information_schema.columns
+                            WHERE table_name = :table_name
+                            ORDER BY ordinal_position;
+                        """),
+                        {"table_name": table_name}
+                    )
+                    columns = columns_result.fetchall()
+                    for col in columns:
+                        nullable_str = "NULL" if col[2] == "YES" else "NOT NULL"
+                        default_str = f" DEFAULT {col[3]}" if col[3] else ""
+                        logger.info(f"  - {col[0]} ({col[1]}) {nullable_str}{default_str}")
+            else:
+                logger.info("⚠️  В схеме 'public' таблицы не найдены.")
 
         logger.info("--- Проверка структуры БД завершена ---")
 
