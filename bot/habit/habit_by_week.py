@@ -1,4 +1,3 @@
-# обработка привычки с повтором, например, чт, пт каждые 2 недели
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.utils import markdown
@@ -169,3 +168,4 @@ async def send_habit_by_week(message: types.Message, data: dict) -> None:
         text=text,
         parse_mode=ParseMode.HTML,
         )
+    

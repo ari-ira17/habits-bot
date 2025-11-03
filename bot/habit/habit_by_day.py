@@ -105,4 +105,3 @@ async def send_habit_by_week(message: types.Message, data: dict) -> None:
         f"Время напоминания: {data['time_to_check']}\n"
     )
     await message.answer(text=text, parse_mode=ParseMode.HTML,)
- 
