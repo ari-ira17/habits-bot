@@ -2,3 +2,4 @@ aiogram>=3.22.0
 python-dotenv>=1.1.1
 apscheduler>=3.11.0
 dotenv
+sqlalchemy
