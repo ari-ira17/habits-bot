@@ -1,12 +1,12 @@
 # создание Job и ее добавление
 
-from aiogram import Router, types
-from aiogram.filters import Command
+from aiogram import Router
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
+from datetime import datetime
 
-from create_bot import scheduler
 from .states import Habit_By_Days
+
 
 router = Router()
 
@@ -45,6 +45,69 @@ async def habit_by_day_scheduler(scheduler, bot, user_id: int, title: str, hours
         return False
 
 
+def ru_days_to_cron(days_ru: str) -> str:
+    ru_to_en = {
+        "пн": "mon",
+        "вт": "tue",
+        "ср": "wed",
+        "чт": "thu",
+        "пт": "fri",
+        "сб": "sat",
+        "вс": "sun"
+    }
+    days_list = [day.strip().lower() for day in days_ru.split(",")]
+    cron_days = [ru_to_en[day] for day in days_list if day in ru_to_en]
+    return ",".join(cron_days)
+
+
+async def habit_by_week_scheduler(scheduler, bot, user_id: int, title: str, hours: int, minutes: int,
+                                  weekdays_cron: str, period_weeks: int, user_timezone_str: str, created_at_iso: str):
+    job_id = f"habit_week_{user_id}_{title}"
+
+    try:
+        user_tz = ZoneInfo(user_timezone_str)
+        created_at = datetime.fromisoformat(created_at_iso)
+
+        trigger = CronTrigger(
+            day_of_week=weekdays_cron,
+            hour=hours,
+            minute=minutes,
+            timezone=user_tz
+        )
+
+        job = scheduler.add_job(
+            func=habit_week_reminder_job,
+            trigger=trigger,
+            id=job_id,
+            replace_existing=True,
+            kwargs={
+                'bot': bot,
+                'user_id': user_id,
+                'title': title,
+                'period_weeks': period_weeks,
+                'created_at_iso': created_at_iso,
+                'user_timezone_str': user_timezone_str
+            }
+        )
+        print(f"Задача '{job_id}' запланирована: каждую неделю в {weekdays_cron} {hours:02d}:{minutes:02d} по {user_timezone_str}.")
+        return True
+    except Exception as e:
+        print(f"Ошибка при создании задачи: {e}")
+        return False
+
+
+async def habit_week_reminder_job(bot, user_id: int, title: str, period_weeks: int, created_at_iso: str, user_timezone_str: str):
+    try:
+        user_tz = ZoneInfo(user_timezone_str)
+        now = datetime.now(user_tz)
+        created_at = datetime.fromisoformat(created_at_iso).astimezone(user_tz)
+
+        weeks_passed = (now.date() - created_at.date()).days // 7
+
+        if weeks_passed % period_weeks == 0:
+            await bot.send_message(user_id, f"Напоминание: пора выполнить привычку '{title}'!")
+    except Exception as e:
+        print(f"Ошибка в habit_week_reminder_job: {e}")
 
 
 # # напоминание о привычке
@@ -72,29 +135,3 @@ async def habit_by_day_scheduler(scheduler, bot, user_id: int, title: str, hours
 
 # f"Я подготовил совет, который может помочь тебе👊\n"
 # # один рандомновыбранный из списка совет
-
-
-
-
-@router.message(Command("my_reminders"))
-async def show_reminders(message: types.Message):
-    user_id = message.from_user.id
-    jobs = scheduler.get_jobs()
-    user_jobs = [job for job in jobs if job.id.startswith(f"habit_{user_id}_")]
-
-    if not user_jobs:
-        await message.answer("У вас пока нет запланированных напоминаний.")
-        return
-
-    text = "Ваши запланированные напоминания:\n\n"
-    for job in user_jobs:
-
-        parts = job.id.split('_', 2)
-        if len(parts) == 3:
-            _, _, title = parts
-        else:
-            title = "Неизвестная привычка"
-        next_run = job.next_run_time.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_time else "Неизвестно"
-        text += f"- Привычка: {title}\n  Следующее напоминание: {next_run}\n\n"
-
-    await message.answer(text)
