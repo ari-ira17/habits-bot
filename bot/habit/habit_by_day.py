@@ -7,6 +7,8 @@ from aiogram.enums import ParseMode
 
 from .states import Habit_By_Days
 from .data import user_habits
+from .scheduler import habit_by_day_scheduler
+from create_bot import scheduler
 
 router = Router(name=__name__)
 
@@ -36,7 +38,7 @@ async def set_num_days(message : types.Message, state : FSMContext):
     
 
 @router.message(Habit_By_Days.time_to_check, F.text)
-async def set_time_to_check(message: types.Message, state: FSMContext):
+async def set_time_to_check(message: types.Message, state: FSMContext, bot):
     parts = message.text.split(':')
 
     if len(parts) == 2 and parts[0].isnumeric() and parts[1].isnumeric():
@@ -46,7 +48,7 @@ async def set_time_to_check(message: types.Message, state: FSMContext):
             await state.update_data(time_to_check=f"{hours:02d}:{minutes:02d}")
 
             data = await state.get_data()
-            await send_habit_by_week(message, data)
+            await send_habit_by_day(message, data, bot)
             await state.clear()  
             return
         else:
@@ -89,9 +91,9 @@ async def set_num_days_invalid_content_type(message: types.Message, state: FSMCo
         )
 
 
-async def send_habit_by_week(message: types.Message, data: dict) -> None:
+async def send_habit_by_day(message: types.Message, data: dict, bot) -> None:
     user_id = message.from_user.id
-    
+
     if user_id not in user_habits:
         user_habits[user_id] = []
 
@@ -105,3 +107,38 @@ async def send_habit_by_week(message: types.Message, data: dict) -> None:
         f"Время напоминания: {data['time_to_check']}\n"
     )
     await message.answer(text=text, parse_mode=ParseMode.HTML,)
+
+    hours, minutes = map(int, data['time_to_check'].split(':'))
+
+    user_timezone_str = "UTC"  
+    user_data_list = user_habits.get(user_id, [])
+    for item in user_data_list:
+        if isinstance(item, dict) and 'timezone' in item:
+            user_timezone_str = item['timezone']
+            break
+
+    success = await habit_by_day_scheduler(
+        scheduler=scheduler,
+        bot=bot,
+        user_id=user_id,
+        title=data['title'],
+        hours=hours,       
+        minutes=minutes,    
+        num_days=data['num_days'],
+        user_timezone_str=user_timezone_str
+    )
+
+    if success:
+        await message.answer(
+            text = f"Напоминание успешно установлено!🥳\n\n"
+
+                    f"Чтобы добавить новую привычку используйте /add_habit🫶"
+            )
+    else:
+        await message.answer(
+            text = f"Привычка с таким названием уже существует☹️\n\n"
+
+                    f"Напоминание не было установлено, создайте задачу с другим заголовком😉\n\n"
+
+                    f"Чтобы добавить новую привычку используйте /add_habit🫶"
+            )

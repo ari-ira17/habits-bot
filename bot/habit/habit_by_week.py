@@ -2,9 +2,12 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.utils import markdown
 from aiogram.enums import ParseMode
+from datetime import datetime, timezone
 
 from .states import Habit_By_Week
 from .data import user_habits
+from .scheduler import ru_days_to_cron, habit_by_week_scheduler
+from create_bot import scheduler
 
 router = Router(name=__name__)
 
@@ -86,7 +89,7 @@ async def set_weekdays_handler(message: types.Message, state: FSMContext):
     )
 
 @router.message(Habit_By_Week.time_to_check, F.text)
-async def set_time_to_check(message: types.Message, state: FSMContext):
+async def set_time_to_check(message: types.Message, state: FSMContext, bot):
     parts = message.text.split(':')
 
     if len(parts) == 2 and parts[0].isnumeric() and parts[1].isnumeric():
@@ -96,7 +99,7 @@ async def set_time_to_check(message: types.Message, state: FSMContext):
             await state.update_data(time_to_check=f"{hours:02d}:{minutes:02d}")
 
             data = await state.get_data()
-            await send_habit_by_week(message, data)
+            await send_habit_by_week(message, data, bot)
             await state.clear()  
             return
         else:
@@ -143,12 +146,14 @@ async def set_period_invalid_content_type(message: types.Message, state: FSMCont
         parse_mode=ParseMode.HTML,
     )
 
-async def send_habit_by_week(message: types.Message, data: dict) -> None:
+
+async def send_habit_by_week(message: types.Message, data: dict, bot) -> None:
     user_id = message.from_user.id
-    
+
     if user_id not in user_habits:
         user_habits[user_id] = []
 
+    data["created_at"] = datetime.now(timezone.utc).isoformat()
     user_habits[user_id].append(data)
 
     weekdays_display = data['weekdays']
@@ -157,15 +162,37 @@ async def send_habit_by_week(message: types.Message, data: dict) -> None:
 
     text = (
         f"<b>Ваша добавленная привычка</b>:\n\n"
-
         f"Название: {data['title']}\n"
         f"Число повторов в неделях: {data['period']}\n"
         f"Дни напоминания: {weekdays_display}\n"
         f"Время напоминания: {data['time_to_check']}\n"
     )
+    await message.answer(text=text, parse_mode=ParseMode.HTML)
 
-    await message.answer(
-        text=text,
-        parse_mode=ParseMode.HTML,
-        )
+    hours, minutes = map(int, data['time_to_check'].split(':'))
+    weekdays_cron = ru_days_to_cron(data['weekdays'])
+    user_timezone_str = "UTC"  
+
+    success = await habit_by_week_scheduler(
+        scheduler=scheduler,
+        bot=bot,
+        user_id=user_id,
+        title=data['title'],
+        hours=hours,
+        minutes=minutes,
+        weekdays_cron=weekdays_cron,
+        period_weeks=int(data['period']),
+        user_timezone_str=user_timezone_str,
+        created_at_iso=data["created_at"]
+    )
+
+    if success:
+        await message.answer(
+            text = f"Напоминание успешно установлено!🥳\n\n"
+                    f"Чтобы добавить новую привычку используйте /add_habit🫶"
+            )
+    else:
+        await message.answer(
+            text = f"Привычка с таким названием уже существует. "
+                    f"Напоминание не установлено.")
     
