@@ -18,11 +18,23 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from db import get_db
 from crud import get_or_create_user
 
+from sqlalchemy import select
+from models import User
+
 
 router = Router(name=__name__)
 
 @router.message(F.text==ButtonText.YES)
 async def ask_timezone(message: types.Message, state: FSMContext):
+    
+    async for session in get_db():
+        result = await session.execute(select(User.id).where(User.id == message.from_user.id))
+        existing_user_id = result.scalar_one_or_none()
+
+        if existing_user_id:
+            await show_examples_of_habits(message)
+            return  
+        
     await state.set_state(AskLocation.waiting_for_location)
     await message.answer(
         text = f"Пожалуйста, отправьте Вашу геолокацию, "
