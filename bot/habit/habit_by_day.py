@@ -16,6 +16,7 @@ router = Router(name=__name__)
 async def add_habit_by_day(callback: types.CallbackQuery, state : FSMContext):
     await state.set_state(Habit_By_Days.title)
 
+
     await state.update_data(owner_id=callback.from_user.id)
     await callback.message.edit_reply_markup(reply_markup=None)
 
@@ -48,7 +49,7 @@ async def set_time_to_check(message: types.Message, state: FSMContext, bot):
             await state.update_data(time_to_check=f"{hours:02d}:{minutes:02d}")
 
             data = await state.get_data()
-            await send_habit_by_day(message, data, bot)
+            #await send_habit_by_day(message, data, bot)
             await state.clear()  
             return
         else:
@@ -90,55 +91,135 @@ async def set_num_days_invalid_content_type(message: types.Message, state: FSMCo
             parse_mode=ParseMode.HTML,
         )
 
+# скорее всего не нужно
 
-async def send_habit_by_day(message: types.Message, data: dict, bot) -> None:
-    user_id = message.from_user.id
+# bot/routers/habits_by_days.py
+# from bot.db import get_db
+# from bot.crud import create_habit, get_or_create_user
+# from datetime import datetime
+# import pytz
 
-    if user_id not in user_habits:
-        user_habits[user_id] = []
 
-    user_habits[user_id].append(data)
+# async def send_habit_by_day(message: types.Message, data: dict, bot) -> None:
+#     user_id = message.from_user.id
 
-    text = (
-        f"<b>Ваша добавленная привычка</b>:\n\n"
+#     # Получаем сессию
+#     async for session in get_db():
+#         # Создаём пользователя в БД, если его нет
+#         user = await get_or_create_user(db=session, telegram_id=user_id)
 
-        f"Название: {data['title']}\n"
-        f"Число повторов в днях: {data['num_days']}\n"
-        f"Время напоминания: {data['time_to_check']}\n"
-    )
-    await message.answer(text=text, parse_mode=ParseMode.HTML,)
+#         # Используем timezone_offset из БД (он должен быть в UTC, если хранится в секундах)
+#         user_timezone_offset = user.timezone_offset or 0  # по умолчанию 0 (UTC)
+#         user_tz = pytz.FixedOffset(user_timezone_offset // 60)  # в минутах
+#         utc_tz = pytz.utc
 
-    hours, minutes = map(int, data['time_to_check'].split(':'))
+#         # Время напоминания по локальному времени пользователя
+#         hours, minutes = map(int, data['time_to_check'].split(':'))
 
-    user_timezone_str = "UTC"  
-    user_data_list = user_habits.get(user_id, [])
-    for item in user_data_list:
-        if isinstance(item, dict) and 'timezone' in item:
-            user_timezone_str = item['timezone']
-            break
+#         # Создаём объект datetime в локальном времени пользователя
+#         local_dt = datetime.now(user_tz).replace(hour=hours, minute=minutes, second=0, microsecond=0)
+#         # Переводим в UTC
+#         utc_dt = local_dt.astimezone(utc_tz)
 
-    success = await habit_by_day_scheduler(
-        scheduler=scheduler,
-        bot=bot,
-        user_id=user_id,
-        title=data['title'],
-        hours=hours,       
-        minutes=minutes,    
-        num_days=data['num_days'],
-        user_timezone_str=user_timezone_str
-    )
+#         # Пример конфига для БД
+#         reminder_config = {
+#             "type": "by_day",
+#             "num_days": data['num_days'],
+#             "time": data['time_to_check']
+#         }
 
-    if success:
-        await message.answer(
-            text = f"Напоминание успешно установлено!🥳\n\n"
+#         # Создаём запись в БД
+#         habit = await create_habit(
+#             db=session,
+#             user_id=user_id,
+#             name=data['title'],
+#             reminder_config=reminder_config,
+#             next_reminder_datetime_utc=utc_dt
+#         )
 
-                    f"Чтобы добавить новую привычку используйте /add_habit🫶"
-            )
-    else:
-        await message.answer(
-            text = f"Привычка с таким названием уже существует☹️\n\n"
+#     # Сообщаем пользователю, что привычка добавлена
+#     text = (
+#         f"<b>Ваша добавленная привычка</b>:\n\n"
+#         f"Название: {data['title']}\n"
+#         f"Число повторов в днях: {data['num_days']}\n"
+#         f"Время напоминания: {data['time_to_check']}\n"
+#     )
+#     await message.answer(text=text, parse_mode=ParseMode.HTML)
 
-                    f"Напоминание не было установлено, создайте задачу с другим заголовком😉\n\n"
+#     # Получаем таймзону из БД (если нужно для планировщика)
+#     user_timezone_str = str(user_tz)  # или можно хранить в БД строкой и использовать её
 
-                    f"Чтобы добавить новую привычку используйте /add_habit🫶"
-            )
+#     success = await habit_by_day_scheduler(
+#         scheduler=scheduler,
+#         bot=bot,
+#         user_id=user_id,
+#         title=data['title'],
+#         hours=hours,
+#         minutes=minutes,
+#         num_days=data['num_days'],
+#         user_timezone_str=user_timezone_str
+#     )
+
+#     if success:
+#         await message.answer(
+#             text=f"Напоминание успешно установлено!🥳\n\n"
+#                  f"Чтобы добавить новую привычку используйте /add_habit🫶"
+#         )
+#     else:
+#         await message.answer(
+#             text=f"Привычка с таким названием уже существует☹️\n\n"
+#                  f"Напоминание не было установлено, создайте задачу с другим заголовком😉\n\n"
+#                  f"Чтобы добавить новую привычку используйте /add_habit🫶"
+#         )
+
+# async def send_habit_by_day(message: types.Message, data: dict, bot) -> None:
+#     user_id = message.from_user.id
+
+#     if user_id not in user_habits:
+#         user_habits[user_id] = []
+
+#     user_habits[user_id].append(data)
+
+#     text = (
+#         f"<b>Ваша добавленная привычка</b>:\n\n"
+
+#         f"Название: {data['title']}\n"
+#         f"Число повторов в днях: {data['num_days']}\n"
+#         f"Время напоминания: {data['time_to_check']}\n"
+#     )
+#     await message.answer(text=text, parse_mode=ParseMode.HTML,)
+
+#     hours, minutes = map(int, data['time_to_check'].split(':'))
+
+#     user_timezone_str = "UTC"  
+#     user_data_list = user_habits.get(user_id, [])
+#     for item in user_data_list:
+#         if isinstance(item, dict) and 'timezone' in item:
+#             user_timezone_str = item['timezone']
+#             break
+
+#     success = await habit_by_day_scheduler(
+#         scheduler=scheduler,
+#         bot=bot,
+#         user_id=user_id,
+#         title=data['title'],
+#         hours=hours,       
+#         minutes=minutes,    
+#         num_days=data['num_days'],
+#         user_timezone_str=user_timezone_str
+#     )
+
+#     if success:
+#         await message.answer(
+#             text = f"Напоминание успешно установлено!🥳\n\n"
+
+#                     f"Чтобы добавить новую привычку используйте /add_habit🫶"
+#             )
+#     else:
+#         await message.answer(
+#             text = f"Привычка с таким названием уже существует☹️\n\n"
+
+#                     f"Напоминание не было установлено, создайте задачу с другим заголовком😉\n\n"
+
+#                     f"Чтобы добавить новую привычку используйте /add_habit🫶"
+#             )

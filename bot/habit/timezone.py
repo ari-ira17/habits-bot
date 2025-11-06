@@ -4,12 +4,19 @@ from aiogram.types import ReplyKeyboardRemove
 import requests 
 import time
 from typing import Union
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import os
+import sys
 
-from .data import user_habits
 from config import CONFIG
 from keyboards.reply_keyboards.done_habit_kb import ButtonText
 from .states import AskLocation
 from .add_habit import show_examples_of_habits
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
+from db import get_db
+from crud import get_or_create_user
 
 
 router = Router(name=__name__)
@@ -23,22 +30,38 @@ async def ask_timezone(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove(),
     )
 
+
 @router.message(AskLocation.waiting_for_location, F.location)
 async def handle_location(message: types.Message, state: FSMContext):
+
     lat = message.location.latitude
     lon = message.location.longitude
 
     timezone_name = get_timezone_by_coords(lat, lon)
 
     if timezone_name:
-        if message.from_user.id not in user_habits:
-            user_habits[message.from_user.id] = []
-        user_habits[message.from_user.id].append({'timezone': timezone_name})
+        await message.answer(f"Ваш часовой пояс: {timezone_name}🌏")
 
-        await message.answer(f"Ваш часовой пояс: {timezone_name}.")
+        try:
+            print(f"Получен timezone_name: {repr(timezone_name)}")
+            tz = ZoneInfo(timezone_name)
+            now = datetime.now(tz)
+            offset_seconds = int(tz.utcoffset(now).total_seconds())
+        except Exception as e:
+            print(f"Ошибка при вычислении смещения: {e}")
+            await message.answer("Не удалось вычислить смещение. Попробуйте ещё раз☹️")
+            return
+        
+        async for session in get_db():
+            user = await get_or_create_user(
+                db=session,
+                telegram_id=message.from_user.id,
+                timezone_offset=offset_seconds
+            )
         await show_examples_of_habits(message)
+
     else:
-        await message.answer("Не удалось определить часовой пояс. Попробуйте ещё раз.")
+        await message.answer("Не удалось определить часовой пояс. Попробуйте ещё раз☹️")
 
 
 def get_timezone_by_coords(lat: float, lon: float) -> Union[str, None]:
@@ -51,7 +74,7 @@ def get_timezone_by_coords(lat: float, lon: float) -> Union[str, None]:
         response = requests.get(url)
         data = response.json()
         if data.get('status') == 'OK':
-            return data['zoneName']  
+            return data['zoneName']        
         else:
             print(f"Ошибка от API: {data.get('message')}")
             return None
