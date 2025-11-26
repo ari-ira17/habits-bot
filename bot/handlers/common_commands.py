@@ -145,8 +145,7 @@ async def cmd_delete_habit(message: types.Message, state: FSMContext):
         numbered_habit_info = f"{index}. {habit_details}"
         habit_list_text += numbered_habit_info
 
-    habit_list_text += f"\nПожалуйста, введите номер привычки, которую хотите "
-    f"удалить (или нажмите кнопку для отмены)😉"    
+    habit_list_text += "\nПожалуйста, введите номер привычки, которую хотите удалить (или нажмите кнопку для отмены)😉"    
 
     await message.answer(
         text=habit_list_text,
