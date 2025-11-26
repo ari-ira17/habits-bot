@@ -1,14 +1,19 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+import sys
+import os
+from sqlalchemy import select
 
-from keyboards.reply_keyboards.done_habit_kb import ButtonText
 from keyboards.inline_keyboards.choose_habit_kb import choose_habit_kb
-from .data import user_habits
+from .timezone import ask_timezone
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
+from db import get_db
+from models import User
 
 
 router = Router(name=__name__)
-
 
 async def show_examples_of_habits(message: types.Message):
     await message.answer(
@@ -23,14 +28,18 @@ async def show_examples_of_habits(message: types.Message):
 
 
 @router.message(Command("add_habit"))
-async def timezone_check(message: types.Message, state : FSMContext):
+async def cmd_add_habit(message: types.Message, state : FSMContext):
 
     user_id = message.from_user.id
 
-    if user_id not in user_habits:
-        from .timezone import ask_timezone
-        await ask_timezone(message, state)
-        return
+    async for session in get_db():
+        result = await session.execute(select(User.id).where(User.id == user_id))
+        existing_user_id = result.scalar_one_or_none()
+
+        if existing_user_id is None:
+            await ask_timezone(message, state)
+            return
+        
     await show_examples_of_habits(message)
 
 
