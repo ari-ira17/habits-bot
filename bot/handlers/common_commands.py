@@ -1,13 +1,25 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
-from aiogram.types import Message
-from aiogram.types import ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardRemove
+from sqlalchemy import select
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+import os
+import sys
 
-from keyboards.reply_keyboards.done_habit_kb import get_on_start_kb
-from keyboards.reply_keyboards.done_habit_kb import ButtonText
-from habit.data import user_habits
+from keyboards.reply_keyboards.get_on_start_kb import get_on_start_kb
+from keyboards.reply_keyboards.get_on_start_kb import ButtonText
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
+from models import User, Habit, HabitCompletion
+from db import get_db
+from crud import delete_habit
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))    
+from habit.scheduler import calculate_completion_percentage
 
 router = Router()
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -24,6 +36,7 @@ async def cmd_start(message: Message):
         reply_markup=get_on_start_kb(),
     )
 
+
 @router.message(F.text == ButtonText.NO)
 async def stop_bot(message: types.Message):
     await message.answer(
@@ -31,6 +44,7 @@ async def stop_bot(message: types.Message):
                 f"Я всегда здесь чтобы помочь!\n\n"
                 f"Чтобы начать позже, просто используйте команду /add_habit😊",
                 reply_markup=ReplyKeyboardRemove()) 
+    
     
 @router.message(Command("help"))
 async def cmd_help(message: Message):
@@ -67,18 +81,143 @@ async def cmd_help(message: Message):
         reply_markup=ReplyKeyboardRemove()
     )
 
+
 @router.message(Command("show_my_habits"))
-async def cmd_show_my_habits(message: Message):
+async def cmd_show_my_habits(message: types.Message):
     user_id = message.from_user.id
-    
-    if user_id not in user_habits or not user_habits[user_id]:
+
+    user_habits_from_db = []
+    async for session in get_db():
+        result = await session.execute(
+            select(Habit).where(Habit.user_id == user_id)
+        )
+        user_habits_from_db = result.scalars().all()
+        break  
+
+    if not user_habits_from_db:
         await message.answer(
-            text = f"У вас пока нет добавленных привычек.",
-            reply_markup=ReplyKeyboardRemove())
+            text="У вас пока нет добавленных привычек.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         return
+
+    habit_list_text = "📋 Ваши привычки:\n\n"
+    for index, habit in enumerate(user_habits_from_db, start=1):
+        habit_details = await format_habit_info_for_deletion(habit)
+        numbered_habit_info = f"{index}. {habit_details}"
+        habit_list_text += numbered_habit_info
+
+    full_text = "".join(habit_list_text) 
     
-    habits = user_habits[user_id]
-    text = f"📋 Ваши привычки ({len(habits)}):\n\n"
-    f"Название, инетервал повтора, процент выполнения из БД"
+    await message.answer(
+        text=full_text,
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
+
+class DeleteHabit(StatesGroup):
+    waiting_for_habit_number = State()
+
+
+@router.message(Command("delete_habit"))
+async def cmd_delete_habit(message: types.Message, state: FSMContext):
+
+    user_id = message.from_user.id
+
+    user_habits_from_db = []
+    async for session in get_db():
+        result = await session.execute(
+            select(Habit).where(Habit.user_id == user_id)
+        )
+        user_habits_from_db = result.scalars().all()
+        break  
+
+    if not user_habits_from_db:
+        await message.answer(
+            text="У вас нет добавленных привычек для удаления.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        return
+
+    habit_list_text = "📋 Ваши привычки:\n\n"
+    for index, habit in enumerate(user_habits_from_db, start=1):
+        habit_details = await format_habit_info_for_deletion(habit)
+        numbered_habit_info = f"{index}. {habit_details}"
+        habit_list_text += numbered_habit_info
+
+    habit_list_text += "\nПожалуйста, введите номер привычки, которую хотите удалить (или /cancel для отмены):"    
+
+    await message.answer(habit_list_text)
     
-    await message.answer(text)
+    await state.set_state(DeleteHabit.waiting_for_habit_number)
+    await state.update_data(user_habits_list=user_habits_from_db)
+
+
+@router.message(DeleteHabit.waiting_for_habit_number, F.text)
+async def process_habit_number(message: types.Message, state: FSMContext):
+
+    user_input = message.text.strip()
+
+    if not user_input.isdigit():
+        await message.answer("Пожалуйста, введите корректный номер привычки (цифру).")
+        return
+
+    habit_index = int(user_input) - 1 
+
+    data = await state.get_data()
+    user_habits_list = data.get("user_habits_list", [])
+
+    if habit_index < 0 or habit_index >= len(user_habits_list):
+        await message.answer("Номер привычки вне диапазона. Попробуйте снова.")
+        return
+
+    selected_habit = user_habits_list[habit_index]
+    selected_habit_id = selected_habit.id
+    selected_habit_name = selected_habit.name
+
+    user_id = message.from_user.id
+    async for session in get_db(): 
+        success = await delete_habit(
+            db_session=session,
+            habit_id=selected_habit_id,
+            user_id=user_id
+        )
+        if success:
+            await message.answer(f"Привычка '{selected_habit_name}' успешно удалена.")
+        else:
+            await message.answer("Ошибка: привычка не найдена или не принадлежит вам.")
+        break 
+
+    await state.clear()
+
+
+async def format_habit_info_for_deletion(habit: Habit) -> str:
+
+    percentage = await calculate_completion_percentage(habit.id)
+
+    config = habit.reminder_config
+    habit_type = config.get("type", "неизвестно")
+
+    habit_info_lines = [
+        f"Название: {habit.name})"
+    ]
+
+    if habit_type == "by_days":
+        habit_info_lines.append(f"Тип: повторение каждые {config.get('num_days', '?')} день(а)")
+        habit_info_lines.append(f"Время напоминания: {config.get('time_to_check', '?')}")
+
+    elif habit_type == "by_week":
+        period = config.get('period_weeks', '?')
+        days = config.get('weekdays', [])
+        time_check = config.get('time_to_check', '?')
+        days_str = ", ".join(days) if days else "?"
+        habit_info_lines.append(f"Тип: повторение каждые {period} недель(и)")
+        habit_info_lines.append(f"Дни напоминания: {days_str}")
+        habit_info_lines.append(f"Время напоминания: {time_check}")
+
+    status = "✅ Активна" if habit.is_active else "❌ Неактивна"
+    habit_info_lines.append(f"Статус: {status}")
+    habit_info_lines.append(f"Процент выполнения: {percentage}%")
+
+    habit_info = "\n".join(habit_info_lines) + "\n\n"
+    return habit_info
