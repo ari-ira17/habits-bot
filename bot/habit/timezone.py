@@ -10,9 +10,8 @@ import os
 import sys
 
 from config import CONFIG
-from keyboards.reply_keyboards.done_habit_kb import ButtonText
+from keyboards.reply_keyboards.get_on_start_kb import ButtonText
 from .states import AskLocation
-from .add_habit import show_examples_of_habits
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from db import get_db
@@ -26,6 +25,8 @@ router = Router(name=__name__)
 
 @router.message(F.text==ButtonText.YES)
 async def ask_timezone(message: types.Message, state: FSMContext):
+
+    from .add_habit import show_examples_of_habits
     
     async for session in get_db():
         result = await session.execute(select(User.id).where(User.id == message.from_user.id))
@@ -70,6 +71,8 @@ async def handle_location(message: types.Message, state: FSMContext):
                 telegram_id=message.from_user.id,
                 timezone_offset=offset_seconds
             )
+
+        from .add_habit import show_examples_of_habits
         await show_examples_of_habits(message)
 
     else:
