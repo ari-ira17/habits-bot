@@ -6,3 +6,4 @@ sqlalchemy
 asyncpg
 requests
 greenlet
+matplotlib
