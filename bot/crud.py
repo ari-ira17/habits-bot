@@ -1,17 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update
+from sqlalchemy import update, delete
 import os
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '.', 'bot'))
 from models import User, Habit, HabitCompletion
 from datetime import datetime, timezone
 
 
 async def get_or_create_user(db: AsyncSession, telegram_id: int, timezone_offset: int = 0):
-    """
-    Получает пользователя по telegram_id или создает нового, если не существует.
-    """
+
     result = await db.execute(select(User).where(User.id == telegram_id))
     user = result.scalars().first()
     if not user:
@@ -23,9 +22,7 @@ async def get_or_create_user(db: AsyncSession, telegram_id: int, timezone_offset
 
 
 async def create_habit(db: AsyncSession, user_id: int, name: str, reminder_config: dict, next_reminder_datetime_utc: datetime):
-    """
-    Создает новую привычку для пользователя.
-    """
+
     habit = Habit(
         user_id=user_id,
         name=name,
@@ -37,17 +34,15 @@ async def create_habit(db: AsyncSession, user_id: int, name: str, reminder_confi
     await db.refresh(habit)
     return habit
 
+
 async def get_user_habits(db: AsyncSession, user_id: int):
-    """
-    Получает все привычки конкретного пользователя.
-    """
+
     result = await db.execute(select(Habit).where(Habit.user_id == user_id))
     return result.scalars().all()
 
+
 async def get_habits_for_reminder(db: AsyncSession):
-    """
-    Получает все активные привычки, время напоминания которых наступило.
-    """
+
     now_utc = datetime.now(timezone.utc)
     result = await db.execute(
         select(Habit)
@@ -56,30 +51,39 @@ async def get_habits_for_reminder(db: AsyncSession):
     )
     return result.scalars().all()
 
-async def update_habit_next_reminder(db: AsyncSession, habit_id: int, new_next_reminder: datetime, last_reminded_at: datetime = None):
-    """
-    Обновляет время следующего напоминания и (опционально) время последнего напоминания.
-    """
+
+async def update_habit_next_reminder(db_session: AsyncSession, habit_id: int, new_next_reminder: datetime, last_reminded_at: datetime = None):
+
     values_to_update = {
-        Habit.next_reminder_datetime_utc: new_next_reminder
+        'next_reminder_datetime_utc': new_next_reminder
     }
-    if last_reminded_at:
-        values_to_update[Habit.last_reminded_at] = last_reminded_at
+    if last_reminded_at is not None:
+        values_to_update['last_reminded_at'] = last_reminded_at
 
     stmt = update(Habit).where(Habit.id == habit_id).values(**values_to_update)
-    await db.execute(stmt)
-    await db.commit()
+    await db_session.execute(stmt)
 
+async def record_habit_completion(db_session: AsyncSession, habit_id: int, completed_at: datetime = None):
+    
+    if completed_at is None:
+        completed_at = datetime.now(timezone.utc)
 
-async def record_habit_completion(db: AsyncSession, habit_id: int):
-    """
-    Записывает выполнение привычки.
-    """
     completion = HabitCompletion(
         habit_id=habit_id,
-        completed_at=datetime.now(timezone.utc) # Всегда записываем в UTC
+        completed_at=completed_at
     )
-    db.add(completion)
-    await db.commit()
-    await db.refresh(completion)
-    return completion
+    db_session.add(completion) 
+
+
+async def delete_habit(db_session: AsyncSession, habit_id: int, user_id: int) -> bool:
+    
+    await db_session.execute(
+        delete(HabitCompletion).where(HabitCompletion.habit_id == habit_id)
+    )
+
+    result = await db_session.execute(
+        delete(Habit).where(Habit.id == habit_id, Habit.user_id == user_id)
+    )
+
+    await db_session.commit()
+    return True
