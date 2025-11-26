@@ -11,9 +11,8 @@ from keyboards.reply_keyboards.get_on_start_kb import get_on_start_kb, ButtonTex
 from keyboards.inline_keyboards.confirm_delete_habit_kb import confirm_delete_kb
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
-from models import User, Habit, HabitCompletion
+from models import Habit, HabitCompletion
 from db import get_db
-from crud import delete_habit
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))    
 from habit.scheduler import calculate_completion_percentage
@@ -57,8 +56,10 @@ async def cmd_help(message: Message):
 
                 f"Вот мои <b>команды</b>:\n"
                 f"- /help - общая информация (возможности бота, сбор статистики, принципы формирования привычек, обратная связь)\n"
-                f"- /show_my_habits - покажет все Ваши созданные привычки\n"
-                f"- /add_habit - добавление новой привычки\n\n"
+                f"- /add_habit - добавление новой привычки\n"
+                f"- /delete_habit - удалит выбранную привычку\n"
+                f"- /send_statistic - покажет статистику по привычкам\n"
+                f"- /show_my_habits - покажет все Ваши созданные привычки\n\n"
 
                 f"Процесс формирования привычки основан на <b>многократном выполнении</b> привычки, " 
                 f"чем осуществляется ее закрепление. "
