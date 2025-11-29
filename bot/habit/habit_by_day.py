@@ -96,10 +96,9 @@ async def send_habit_by_day(message: types.Message, data: dict):
     title = data['title']
     num_days = data['num_days']
     time_to_check = data['time_to_check']
-    owner_id = data['owner_id']
 
     info_text = (
-        f"✅ Привычка '{title}' успешно создана!\n\n"
+        f"✅ Привычка <b>{title}</b> успешно создана!\n\n"
         f"📌 Тип: повторение каждые {num_days} день(а)\n"
         f"⏰ Время напоминания: {time_to_check}\n\n"
         f"Следующее напоминание будет рассчитано автоматически."

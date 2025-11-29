@@ -124,13 +124,12 @@ async def send_habit_by_week(message: types.Message, data: dict):
     period_weeks = data['period']
     weekdays_display = data['weekdays']
     time_to_check = data['time_to_check']
-    owner_id = data['owner_id']
 
     if isinstance(weekdays_display, list):
         weekdays_display = ", ".join(weekdays_display)
 
     info_text = (
-        f"✅ Привычка '{title}' успешно создана!\n\n"
+        f"✅ Привычка <b>{title}</b> успешно создана!\n\n"
         f"📌 Тип: повторение каждые {period_weeks} недель(и)\n"
         f"📅 Дни напоминания: {weekdays_display}\n"
         f"⏰ Время напоминания: {time_to_check}\n\n"
