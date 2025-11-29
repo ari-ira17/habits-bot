@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from aiogram import Router
+from aiogram import Router, types
 from sqlalchemy import select, update, func
 import logging
 import random
@@ -8,6 +8,8 @@ import sys
 import os
 
 from keyboards.inline_keyboards.done_habit_kb import done_habit_kb
+from statistic.generate_statistic import generate_statistic_image
+from habit.calculate_percentage import calculate_completion_percentage
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from create_bot import scheduler
@@ -109,63 +111,74 @@ def calculate_next_reminder(reminder_config, user_timezone_offset, last_reminded
     return next_reminder_utc
 
 
-async def calculate_completion_percentage(habit_id: int) -> int:
-    async for session in get_db():
-        completion_count_result = await session.execute(
-            select(func.count(HabitCompletion.id)).where(HabitCompletion.habit_id == habit_id)
+async def deactivate_habit_if_completed(habit_id: int, bot, user_id: int, habit_name: str):
+
+    completion_percentage = await calculate_completion_percentage(habit_id)
+    
+    if completion_percentage >= 100:
+
+        async for session in get_db():
+            stmt = update(Habit).where(Habit.id == habit_id).values(is_active=False)
+            await session.execute(stmt)
+            await session.commit()
+        
+        completion_message = (
+            f"🎉 Поздравляем! Вы достигли своей цели по привычке <b>{habit_name}</b>!\n\n"
+            f"Привычка успешно закреплена — Вы выполнили её 20 раз подряд! 💪\n"
+            f"Привычка теперь деактивирована, и напоминания больше не будут приходить."
         )
-        completion_count = completion_count_result.scalar() or 0
-        percentage = min(100, (completion_count / 10) * 100)
-        return int(percentage)
+        await bot.send_message(chat_id=user_id, text=completion_message, parse_mode='HTML')
+        
+        logger.info(f"Habit {habit_id} deactivated as completion reached 100%")
+        return True
+    return False    
 
 
-async def send_reminder_message(bot, user_id: int, habit_name: str, habit_id: int):
-    notification = (
-        f"Напоминание: пришло время выполнить привычку <b>{habit_name}</b>!☺️\n"
-        f"Cделано?"
-    )
-    await bot.send_message(
-        chat_id=user_id,
-        text=notification,
-        parse_mode='HTML',
-        reply_markup=done_habit_kb(habit_id)  
-    )
-
-
-async def send_completion_message(bot, user_id: int, habit_name: str, percentage: int):
-    done_habit = (
-        f"Отлично! 🎉\n"
-        f"Вы справились — молодец! 💪\n\n"
-        f"Ваш прогресс по привычке <b>{habit_name}</b> составляет <b>{percentage}</b>%"
-    )
-    await bot.send_message(chat_id=user_id, text=done_habit, parse_mode='HTML')
-
-
-async def send_not_done_message(bot, user_id: int, habit_name: str):
-    tips = [
-        "Попробуйте разбить привычку на более мелкие шаги.",
-        "Найдите себе напарника по привычке.",
-        "Отметьте даже минимальный прогресс!",
-        "Наградите себя за выполнение.",
-        "Просто начните с 2 минут.",
-        "Создайте уютное место для выполнения привычки."
-    ]
-    random_tip = random.choice(tips)
-
-    not_done_habit = (
-        f"К сожалению, привычка не была выполнена — текущая серия прервана.\n"
-        f"Ваш прогресс по привычке <b>{habit_name}</b> составляет <b>0</b>%\n\n"
-        f"Продолжай стараться, и обязательно достигнешь своей цели!💫\n\n"
-        f"Я подготовил совет, который может помочь тебе👊\n"
-        f"{random_tip}"
-    )
-    await bot.send_message(chat_id=user_id, text=not_done_habit, parse_mode='HTML')
-
-
-async def schedule_check_reminders(bot):
-    logger.info("Running scheduled check for reminders...")
+async def schedule_first_reminder_for_habit(habit_id: int):
+    logger.info(f"Scheduling first reminder for habit ID: {habit_id}")
     async for session in get_db():
-        now_utc = datetime.now(timezone.utc)
+        result = await session.execute(
+            select(Habit, User.timezone_offset).join(User, Habit.user_id == User.id).where(Habit.id == habit_id)
+        )
+        row = result.first()
+        if not row:
+            logger.error(f"Habit with ID {habit_id} not found for scheduling.")
+            return
+
+        habit, user_tz_offset = row
+        next_reminder_utc = calculate_next_reminder(
+            reminder_config=habit.reminder_config,
+            user_timezone_offset=user_tz_offset,
+            last_reminded_at=None,
+        )
+
+        if next_reminder_utc:
+            stmt_update_next = (
+                update(Habit)
+                .where(Habit.id == habit_id)
+                .values(next_reminder_datetime_utc=next_reminder_utc)
+            )
+            await session.execute(stmt_update_next)
+            logger.info(f"First reminder for habit {habit_id} set to {next_reminder_utc}")
+        else:
+            logger.warning(f"Could not calculate first reminder for habit {habit_id}, setting to None.")
+            stmt_update_next = (
+                update(Habit)
+                .where(Habit.id == habit_id)
+                .values(next_reminder_datetime_utc=None)
+            )
+            await session.execute(stmt_update_next)
+
+        await session.commit()
+
+
+async def schedule_check_reminders_and_statistics(bot):
+
+    logger.info("Running scheduled check for reminders and statistics...")
+    
+    now_utc = datetime.now(timezone.utc)
+    
+    async for session in get_db():
         result = await session.execute(
             select(Habit).join(User).where(
                 Habit.is_active == True,
@@ -225,53 +238,118 @@ async def schedule_check_reminders(bot):
         await session.commit()
         logger.info(f"Checked {len(due_habits)} habits due for reminder.")
 
+    await send_daily_statistic_if_time(bot)
+    await send_weekly_statistic_if_time(bot)
 
-async def schedule_first_reminder_for_habit(habit_id: int):
-    logger.info(f"Scheduling first reminder for habit ID: {habit_id}")
+
+async def send_daily_statistic_if_time(bot):
+
+    logger.debug("Checking for daily statistics...")
+
     async for session in get_db():
-        result = await session.execute(
-            select(Habit, User.timezone_offset).join(User, Habit.user_id == User.id).where(Habit.id == habit_id)
+        users_result = await session.execute(
+            select(User.id, User.timezone_offset)
+            .where(User.timezone_offset.isnot(None))
         )
-        row = result.first()
-        if not row:
-            logger.error(f"Habit with ID {habit_id} not found for scheduling.")
-            return
+        users = users_result.all()
 
-        habit, user_tz_offset = row
-        next_reminder_utc = calculate_next_reminder(
-            reminder_config=habit.reminder_config,
-            user_timezone_offset=user_tz_offset,
-            last_reminded_at=None,
+        for user in users:
+            user_id = user.id
+            timezone_offset = user.timezone_offset
+            
+            user_tz = timezone(timedelta(seconds=timezone_offset))
+            now_user_tz = datetime.now(user_tz)
+            
+            if now_user_tz.hour != 7 or now_user_tz.minute != 0:
+                continue
+                
+            try:
+                image_bytes = await generate_statistic_image(user_id, session)
+                
+                daily_motivations = [
+                    "Продолжайте в том же духе! 💪",
+                    "Каждый день — шаг к вашей цели! 🌟",
+                    "Вы молодец! Не останавливайтесь! 😊",
+                    "Отличная работа! Так держать! 🎉",
+                    "Ваша настойчивость вдохновляет! ✨",
+                    "Маленькие шаги ведут к большим результатам! 🚀"
+                ]
+                motivation = random.choice(daily_motivations)
+                
+                await bot.send_photo(
+                    chat_id=user_id,
+                    photo=types.BufferedInputFile(
+                        image_bytes.read(),
+                        filename="daily_statistic.png"
+                    ),
+                    caption=f"📊 Ежедневный отчёт по привычкам\n\n{motivation}"
+                )
+                
+                logger.info(f"Daily statistic sent to user {user_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to send daily statistic to user {user_id}: {e}")
+
+
+async def send_weekly_statistic_if_time(bot):
+
+    logger.debug("Checking for weekly statistics...")
+    
+    async for session in get_db():
+        users_result = await session.execute(
+            select(User.id, User.timezone_offset)
+            .where(User.timezone_offset.isnot(None))
         )
+        users = users_result.all()
 
-        if next_reminder_utc:
-            stmt_update_next = (
-                update(Habit)
-                .where(Habit.id == habit_id)
-                .values(next_reminder_datetime_utc=next_reminder_utc)
-            )
-            await session.execute(stmt_update_next)
-            logger.info(f"First reminder for habit {habit_id} set to {next_reminder_utc}")
-        else:
-            logger.warning(f"Could not calculate first reminder for habit {habit_id}, setting to None.")
-            stmt_update_next = (
-                update(Habit)
-                .where(Habit.id == habit_id)
-                .values(next_reminder_datetime_utc=None)
-            )
-            await session.execute(stmt_update_next)
+        for user in users:
+            user_id = user.id
+            timezone_offset = user.timezone_offset
 
-        await session.commit()
+            user_tz = timezone(timedelta(seconds=timezone_offset))
+            now_user_tz = datetime.now(user_tz)
+            
+            if now_user_tz.weekday() != 6 or now_user_tz.hour != 9 or now_user_tz.minute != 0:  
+                continue
+                
+            try:
+                image_bytes = await generate_statistic_image(user_id, session)
+                
+                weekly_motivations = [
+                    "Отличная неделя! 🎉\nПродолжайте развивать свои привычки!",
+                    "Неделя подошла к концу — вы справились! 💪\nГотовьтесь к новым победам!",
+                    "Удивительные результаты за неделю! ✨\nСкоро начнётся новый этап!",
+                    "Ваша неделя была продуктивной! 🌟\nСохраняйте этот темп!",
+                    "Неделя завершена — вы молодец! 😊\nСледующая неделя — новые возможности!",
+                    "Великолепная неделя достижений! 🚀\nПродолжайте в том же духе!"
+                ]
+                motivation = random.choice(weekly_motivations)
+                
+                await bot.send_photo(
+                    chat_id=user_id,
+                    photo=types.BufferedInputFile(
+                        image_bytes.read(),
+                        filename="weekly_statistic.png"
+                    ),
+                    caption=f"📊 Недельный отчёт по привычкам\n\n{motivation}"
+                )
+                
+                logger.info(f"Weekly statistic sent to user {user_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to send weekly statistic to user {user_id}: {e}")
 
 
 def start_scheduler(bot):
+
     scheduler.add_job(
-        func=schedule_check_reminders,
+        func=schedule_check_reminders_and_statistics,
         trigger="interval",
         minutes=1,
-        id='check_reminders_job',
+        id='check_reminders_and_statistics_job',
         kwargs={'bot': bot}
     )
+    
     scheduler.start()
     logger.info("Scheduler started.")
 
