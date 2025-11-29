@@ -1,0 +1,19 @@
+from sqlalchemy import select, func
+from aiogram import Router
+import sys
+import os
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
+from models import HabitCompletion
+from db import get_db
+
+router = Router(name=__name__)
+
+async def calculate_completion_percentage(habit_id: int) -> int:
+    async for session in get_db():
+        completion_count_result = await session.execute(
+            select(func.count(HabitCompletion.id)).where(HabitCompletion.habit_id == habit_id)
+        )
+        completion_count = completion_count_result.scalar() or 0
+        percentage = min(100, (completion_count / 20) * 100)
+        return int(percentage)
