@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from habit.calculate_percentage import calculate_completion_percentage
+
 import os, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from models import Habit
@@ -31,9 +33,7 @@ async def generate_statistic_image(user_id: int, session: AsyncSession) -> Bytes
         names = []
 
         for habit in habits:
-            completion_count = len(habit.completions)
-            progress = min(completion_count, 10)  
-            percentage = (progress / 10) * 100
+            percentage = await calculate_completion_percentage(habit.id)
             percentages.append(percentage)
             names.append(habit.name)
 
