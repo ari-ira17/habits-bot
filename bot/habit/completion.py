@@ -1,9 +1,10 @@
 from aiogram import Router, types, F
 from sqlalchemy import select
-from .scheduler import calculate_completion_percentage
 import sys
 import os
 import logging
+
+from .scheduler import calculate_completion_percentage, deactivate_habit_if_completed
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from models import Habit, HabitCompletion
@@ -51,6 +52,8 @@ async def handle_completion(callback: types.CallbackQuery):
         )
 
         await callback.message.edit_text(text=done_habit, parse_mode='HTML', reply_markup=None)
+
+        await deactivate_habit_if_completed(habit_id, callback.bot, callback.from_user.id, habit_name)
 
     await callback.answer()
 
