@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import os
 import sys
+import logging
 
 from keyboards.reply_keyboards.get_on_start_kb import get_on_start_kb, ButtonText
 from keyboards.inline_keyboards.confirm_delete_habit_kb import confirm_delete_kb
@@ -18,6 +19,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from habit.scheduler import calculate_completion_percentage
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 @router.message(Command("start"))
@@ -56,7 +58,7 @@ async def cmd_help(message: Message):
 
                 f"Вот мои <b>команды</b>:\n"
                 f"- /help - общая информация (возможности бота, сбор статистики, принципы формирования привычек, обратная связь)\n"
-                f"- /add_habit - добавление новой привычки\n"
+                f"- /add_habit - добавит новую привычку\n"
                 f"- /delete_habit - удалит выбранную привычку\n"
                 f"- /send_statistic - покажет статистику по привычкам\n"
                 f"- /show_my_habits - покажет все Ваши созданные привычки\n\n"
@@ -252,3 +254,12 @@ async def format_habit_info_for_deletion(habit: Habit) -> str:
 
     habit_info = "\n".join(habit_info_lines) + "\n\n"
     return habit_info
+
+
+@router.message()
+async def handle_unknown_message(message: types.Message):
+
+    await message.answer(
+        text = f"Взаимодействие с ботом происходит через команды😉\n\n"
+                f"Используйте /help для просмотра доступных команд🫂"
+        )
