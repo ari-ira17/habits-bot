@@ -3,6 +3,7 @@ from sqlalchemy import select
 import sys
 import os
 import logging
+import random
 
 from .scheduler import calculate_completion_percentage, deactivate_habit_if_completed
 
@@ -10,6 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from models import Habit, HabitCompletion
 from db import get_db
 from crud import record_habit_completion
+from advices import supporting_tips
 
 
 router = Router(name=__name__)
@@ -75,12 +77,14 @@ async def handle_not_done(callback: types.CallbackQuery):
             await callback.answer("Ошибка: привычка не найдена.", show_alert=True)
             return
         
+        motivation = random.choice(supporting_tips)
+
         not_done_habit = (
             f"К сожалению, привычка не была выполнена — текущая серия прервана.\n"
             f"Ваш прогресс по привычке <b>{habit_name}</b> составляет <b>0</b>%\n\n"
             f"Продолжай стараться, и обязательно достигнешь своей цели!💫\n\n"
             f"Я подготовил совет, который может помочь тебе👊\n"
-            f"Попробуйте разбить привычку на более мелкие шаги."
+            f"{motivation}"
         )
 
         await callback.message.edit_text(text=not_done_habit, parse_mode='HTML', reply_markup=None)
