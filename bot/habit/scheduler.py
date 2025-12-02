@@ -8,14 +8,15 @@ import sys
 import os
 
 from keyboards.inline_keyboards.done_habit_kb import done_habit_kb
-from statistic.generate_statistic import generate_statistic_image
-from habit.calculate_percentage import calculate_completion_percentage
+from statistic.generate_statistic import generate_statistic_image, generate_weekly_statistic_image
+from habit.calculate_percentage import calculate_completion_percentage, calculate_weekly_completion_percentage
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from create_bot import scheduler
 from models import User, Habit, HabitCompletion
 from db import get_db
 from crud import update_habit_next_reminder
+from advices import supporting_tips, weekly_motivations, daily_motivations
 
 
 logger = logging.getLogger(__name__)
@@ -265,15 +266,6 @@ async def send_daily_statistic_if_time(bot):
                 
             try:
                 image_bytes = await generate_statistic_image(user_id, session)
-                
-                daily_motivations = [
-                    "Продолжайте в том же духе! 💪",
-                    "Каждый день — шаг к вашей цели! 🌟",
-                    "Вы молодец! Не останавливайтесь! 😊",
-                    "Отличная работа! Так держать! 🎉",
-                    "Ваша настойчивость вдохновляет! ✨",
-                    "Маленькие шаги ведут к большим результатам! 🚀"
-                ]
                 motivation = random.choice(daily_motivations)
                 
                 await bot.send_photo(
@@ -313,17 +305,34 @@ async def send_weekly_statistic_if_time(bot):
                 continue
                 
             try:
-                image_bytes = await generate_statistic_image(user_id, session)
+                end_date = datetime.now(timezone.utc)
+                start_date = end_date - timedelta(days=7)
                 
-                weekly_motivations = [
-                    "Отличная неделя! 🎉\nПродолжайте развивать свои привычки!",
-                    "Неделя подошла к концу — вы справились! 💪\nГотовьтесь к новым победам!",
-                    "Удивительные результаты за неделю! ✨\nСкоро начнётся новый этап!",
-                    "Ваша неделя была продуктивной! 🌟\nСохраняйте этот темп!",
-                    "Неделя завершена — вы молодец! 😊\nСледующая неделя — новые возможности!",
-                    "Великолепная неделя достижений! 🚀\nПродолжайте в том же духе!"
-                ]
-                motivation = random.choice(weekly_motivations)
+                habits_result = await session.execute(
+                    select(Habit).where(Habit.user_id == user_id, Habit.is_active.is_(True))
+                )
+                habits = habits_result.scalars().all()
+                
+                habit_changes = []
+                has_negative_change = False
+                for habit in habits:
+                    current_percentage = await calculate_completion_percentage(habit.id)
+                    past_percentage = await calculate_weekly_completion_percentage(habit.id, start_date)
+                    change_percentage = current_percentage - past_percentage
+                    habit_changes.append({
+                        'name': habit.name,
+                        'change': change_percentage,
+                        'current': current_percentage
+                    })
+                    if change_percentage <= 0:
+                        has_negative_change = True
+                
+                image_bytes = await generate_weekly_statistic_image(user_id, session)
+
+                if has_negative_change:
+                    motivation = random.choice(supporting_tips)
+                else:
+                    motivation = random.choice(weekly_motivations)
                 
                 await bot.send_photo(
                     chat_id=user_id,
@@ -357,3 +366,4 @@ def start_scheduler(bot):
 def stop_scheduler():
     scheduler.shutdown()
     logger.info("Scheduler stopped.")
+    
