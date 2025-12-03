@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 REPO_DIR="/root/Projects/habits-bot"
@@ -16,12 +15,10 @@ if ! cd "$REPO_DIR"; then
     exit 1
 fi
 
-# 1. GIT PULL: Получение последних изменений
 log "Выполнение git pull..."
 GIT_OUTPUT=$(git pull origin main 2>&1 || true)
 log "Git Output: $GIT_OUTPUT"
 
-# Проверяем, были ли реальные изменения
 if echo "$GIT_OUTPUT" | grep -q "Already up to date."; then
     log "Код не изменился. Завершение работы."
     exit 0
@@ -29,7 +26,6 @@ fi
 
 log "Обнаружены изменения. Переходим к пересборке и развертыванию."
 
-# 2. DOCKER COMPOSE BUILD: Пересборка образа бота
 log "Пересборка Docker образа 'bot'..."
 docker compose $COMPOSE_FILES build bot >> "$LOG_FILE" 2>&1
 if [ $? -ne 0 ]; then
@@ -37,7 +33,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 3. DOCKER COMPOSE UP: Развертывание и перезапуск
 log "Обновление и перезапуск сервисов..."
 docker compose $COMPOSE_FILES up -d --force-recreate bot >> "$LOG_FILE" 2>&1
 if [ $? -ne 0 ]; then
@@ -45,7 +40,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 4. Очистка неиспользуемых образов/ресурсов
 log "Очистка неиспользуемых Docker ресурсов..."
 docker system prune -f >> "$LOG_FILE" 2>&1 || true
 
