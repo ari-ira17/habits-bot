@@ -1,19 +1,19 @@
-from aiogram import Router, types, F
+from aiogram import Router, F, types
 from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-import sys
-import os
 from sqlalchemy import select
+from aiogram.fsm.context import FSMContext
+import os
+import sys
 
 from keyboards.inline_keyboards.choose_habit_kb import choose_habit_kb
-from .timezone import ask_timezone
+from habit.timezone import ask_timezone
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
 from db import get_db
 from models import User
 
+router = Router()
 
-router = Router(name=__name__)
 
 async def show_examples_of_habits(message: types.Message):
     await message.answer(

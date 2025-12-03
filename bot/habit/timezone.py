@@ -26,7 +26,7 @@ router = Router(name=__name__)
 @router.message(F.text==ButtonText.YES)
 async def ask_timezone(message: types.Message, state: FSMContext):
 
-    from .add_habit import show_examples_of_habits
+    from handlers.add_habit_handler import show_examples_of_habits
     
     async for session in get_db():
         result = await session.execute(select(User.id).where(User.id == message.from_user.id))
@@ -72,7 +72,7 @@ async def handle_location(message: types.Message, state: FSMContext):
                 timezone_offset=offset_seconds
             )
 
-        from .add_habit import show_examples_of_habits
+        from handlers.add_habit_handler import show_examples_of_habits
         await show_examples_of_habits(message)
 
     else:

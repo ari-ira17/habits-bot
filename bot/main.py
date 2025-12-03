@@ -1,14 +1,10 @@
 import asyncio
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from create_bot import bot, dp
 from handlers import router as common_router
 from habit import router as habit_router
-from statistic import router as statistic_router
 from db import check_db_connection_and_schema, engine
-from models import Base, User, Habit, HabitCompletion
+from models import Base, Habit
 
 async def show_habits():
     from db import get_db
@@ -39,7 +35,6 @@ async def main():
 
     dp.include_router(common_router)
     dp.include_router(habit_router)
-    dp.include_router(statistic_router)
 
     from habit.scheduler import start_scheduler
     start_scheduler(bot)
