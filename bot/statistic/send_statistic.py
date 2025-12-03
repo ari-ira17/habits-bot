@@ -78,7 +78,7 @@ async def send_weekly_statistic_if_time(bot):
             user_tz = timezone(timedelta(seconds=timezone_offset))
             now_user_tz = datetime.now(user_tz)
 
-            if now_user_tz.weekday() != 6 or now_user_tz.hour != 9 or now_user_tz.minute != 0:  
+            if now_user_tz.weekday() != 6 or now_user_tz.hour != 12 or now_user_tz.minute != 0:  
                 continue
                 
             try:
