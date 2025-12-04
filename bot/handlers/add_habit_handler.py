@@ -1,0 +1,51 @@
+from aiogram import Router, F, types
+from aiogram.filters import Command
+from sqlalchemy import select
+from aiogram.fsm.context import FSMContext
+import os
+import sys
+
+from keyboards.inline_keyboards.choose_habit_kb import choose_habit_kb
+from habit.timezone import ask_timezone
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'bot'))
+from db import get_db
+from models import User
+
+router = Router()
+
+
+async def show_examples_of_habits(message: types.Message):
+    await message.answer(
+        text = f"Вы можете создать привычку с разным типом повторения:\n\n"  
+    )
+    await message.answer(
+        text = f"📚  Привычка <b>Чтение</b> с напоминанием каждые 2 дня в 20:00\n"
+                f"🧹  Привычка <b>Уборка</b> с напоминанием по вторникам каждые две недели в 10:00\n\n"
+                f"Хотите создать задачу с повторением по дням или по неделям?",
+                reply_markup=choose_habit_kb,             
+    )
+
+
+@router.message(Command("add_habit"))
+async def cmd_add_habit(message: types.Message, state : FSMContext):
+
+    user_id = message.from_user.id
+
+    async for session in get_db():
+        result = await session.execute(select(User.id).where(User.id == user_id))
+        existing_user_id = result.scalar_one_or_none()
+
+        if existing_user_id is None:
+            await ask_timezone(message, state)
+            return
+        
+    await show_examples_of_habits(message)
+
+
+@router.callback_query(F.data=="no")
+async def add_habit_no(callback: types.CallbackQuery):
+    await callback.message.answer(
+        text= f"Если появится желание - используйте команду /add_habit😌",
+    )
+    
