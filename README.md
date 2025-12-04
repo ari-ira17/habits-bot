@@ -63,3 +63,4 @@
 - **База данных**: SQLAlchemy с поддержкой PostgreSQL/SQLite
 - **Планировщик задач**: APScheduler
 - **Графики**: matplotlib
+- **API**: TimeZoneDB
