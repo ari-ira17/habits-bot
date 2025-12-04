@@ -84,7 +84,7 @@
 ├── deploy.sh                          # Скрипт для деплоя
 ├── docker-compose.dev.yml             # Docker Compose для разработки
 └── docker-compose.prod.yml            # Docker Compose для продакшена
-
+```
 ---
 
 ## Технические детали
