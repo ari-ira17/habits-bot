@@ -100,7 +100,7 @@
 
 ## Автор
 
-@ari_ira17, smnk-1
+@ari_ira17, @smnk-1
 
 ---
 
