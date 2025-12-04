@@ -95,3 +95,14 @@
 - **Планировщик задач**: AsyncIOScheduler
 - **Графики**: matplotlib
 - **API**: TimeZoneDB
+
+---
+
+## Автор
+
+@ari_ira17
+---
+
+## Лицензия
+
+MIT License
