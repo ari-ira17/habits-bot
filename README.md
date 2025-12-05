@@ -106,4 +106,4 @@
 
 ## Лицензия
 
-MIT License
+GPL v3
