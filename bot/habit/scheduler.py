@@ -76,27 +76,34 @@ def calculate_next_reminder(reminder_config, user_timezone_offset, last_reminded
             start_date = last_local.date() + timedelta(days=1)
         else:
             start_date = now_user_tz.date() 
-
         next_date = None
         current_date = start_date
-        max_days_to_check = (period_weeks + 1) * 7
-
-        for _ in range(max_days_to_check):
+        
+        for i in range(7):  
             current_weekday = current_date.weekday()
             if current_weekday in weekdays_target:
-                if last_reminded_at:
-                    days_since_last = (current_date - last_local.date()).days
-                    if days_since_last >= period_weeks * 7:
-                        next_date = current_date
-                        break
-                else:
+                if current_date >= start_date:
                     next_date = current_date
                     break
             current_date += timedelta(days=1)
 
         if next_date is None:
+            if last_reminded_at:
+                search_start_date = (last_local.date() + timedelta(weeks=period_weeks))
+            else:
+                search_start_date = start_date + timedelta(weeks=period_weeks)
+            
+            current_date = search_start_date
+            for i in range(7):
+                current_weekday = current_date.weekday()
+                if current_weekday in weekdays_target:
+                    next_date = current_date
+                    break
+                current_date += timedelta(days=1)
+        if next_date is None:
             logger.warning(f"Could not find a suitable date for weekly habit. Config: {reminder_config}")
             return None
+            
         next_reminder_local = datetime.combine(next_date, time_to_check, tzinfo=user_tz)
 
     else:
